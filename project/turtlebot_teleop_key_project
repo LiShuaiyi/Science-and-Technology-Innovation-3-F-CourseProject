@@ -1,0 +1,81 @@
+#!/usr/bin/env python
+
+# Copyright (c) 2011, Willow Garage, Inc.
+# All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+#
+#    * Redistributions of source code must retain the above copyright
+#      notice, this list of conditions and the following disclaimer.
+#    * Redistributions in binary form must reproduce the above copyright
+#      notice, this list of conditions and the following disclaimer in the
+#      documentation and/or other materials provided with the distribution.
+#    * Neither the name of the Willow Garage, Inc. nor the names of its
+#      contributors may be used to endorse or promote products derived from
+#       this software without specific prior written permission.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+# ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+# LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+# CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+# SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+# INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+# CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+# ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+# POSSIBILITY OF SUCH DAMAGE.
+
+import rospy
+from move_base_msgs.msg import MoveBaseAction, MoveBaseGoal
+import actionlib
+from actionlib_msgs.msg import *
+from geometry_msgs.msg import Pose, Point, Quaternion
+from nav_msgs.msg  import Odometry 
+from geometry_msgs.msg import PoseWithCovarianceStamped
+import math
+import os
+
+#to use it, just replace the turtlebot_teleop_key.py with it
+#and change the launch file with the new name
+
+master_pos = {'x': 3.3, 'y' : -0.856}	#master position
+flag = 0
+
+def listener():
+    # 
+    rospy.init_node('listener', anonymous=True)
+    # 
+    rospy.Subscriber('/amcl_pose', PoseWithCovarianceStamped, callback)
+    # spin() simply keeps python from exiting until this node is stopped
+    rospy.spin()
+
+def callback(data):
+    global flag
+    pos_x = data.pose.pose.position.x	#refer to the ros.wiki the structure Matrioska...
+    pos_y = data.pose.pose.position.y
+	#distance between master and servant
+    distance = math.sqrt((pos_x-master_pos['x'])*(pos_x-master_pos['x'])+(pos_y-master_pos['y'])*(pos_y-master_pos['y']))	
+    if distance < 1.7:	#stop when the distance between servant and master is less than 2 meters
+			#due to the delay of /ancl_pose topic, the servant always stop at about 1.4 to 1.2 meters
+			#(just estimate it roughly...)
+	if flag == 0:	#without this flag servant can never leave its current postion 
+	    flag = 1	#for ever little move will triger this judgement and send a stop message
+	    os.system("rostopic pub -1 /move_base/cancel actionlib_msgs/GoalID -- {}")	#send a stop message
+	    rospy.sleep(3)	#sleep to wait for message to be receieve and react
+   	    print("stop")	#--why set 3 seconds?--i too, don't want it such long, but the output log says it needs 3 seconds(which i doubt the real fact...)
+    if distance > 2.2:	#without this adjustment of flag value, the next time servant reaching for master, it won't stop when distance is smaller than 2 meters 
+	flag = 0
+    print("Distance between me and my master: %f" %(distance))
+    #print(distance)		
+
+if __name__=="__main__":
+    try:
+        listener()
+
+    except Exception as e:
+        print(e)
+
+   
+
